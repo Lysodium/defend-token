@@ -15,8 +15,9 @@ import torch.nn.functional as F
 from fastchat.model import get_conversation_template
 from transformers import (AutoModelForCausalLM, AutoTokenizer, GPT2LMHeadModel,
                           GPTJForCausalLM, GPTNeoXForCausalLM,
-                          LlamaForCausalLM)
-
+                          LlamaForCausalLM,)
+from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
+from auto_gptq.modeling import LlamaGPTQForCausalLM
 
 class NpEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -35,6 +36,8 @@ def get_embedding_layer(model):
         return model.model.embed_tokens
     elif isinstance(model, GPTNeoXForCausalLM):
         return model.base_model.embed_in
+    elif isinstance(model, LlamaGPTQForCausalLM):
+        return model.model.embed_tokens
     else:
         raise ValueError(f"Unknown model type: {type(model)}")
 
@@ -45,6 +48,8 @@ def get_embedding_matrix(model):
         return model.model.embed_tokens.weight
     elif isinstance(model, GPTNeoXForCausalLM):
         return model.base_model.embed_in.weight
+    elif isinstance(model, LlamaGPTQForCausalLM):
+        return model.model.model.embed_tokens.weight
     else:
         raise ValueError(f"Unknown model type: {type(model)}")
 
@@ -55,6 +60,8 @@ def get_embeddings(model, input_ids):
         return model.model.embed_tokens(input_ids)
     elif isinstance(model, GPTNeoXForCausalLM):
         return model.base_model.embed_in(input_ids).half()
+    elif isinstance(model, LlamaGPTQForCausalLM):
+        return model.model.model.embed_tokens(input_ids)
     else:
         raise ValueError(f"Unknown model type: {type(model)}")
 
@@ -235,11 +242,10 @@ class AttackPrompt(object):
             print('WARNING: max_new_tokens > 32 may cause testing to slow down.')
         input_ids = self.input_ids[:self._assistant_role_slice.stop].to(model.device).unsqueeze(0)
         attn_masks = torch.ones_like(input_ids).to(model.device)
-        output_ids = model.generate(input_ids, 
+        output_ids = model.generate(inputs=input_ids, 
                                     attention_mask=attn_masks, 
                                     generation_config=gen_config,
                                     pad_token_id=self.tokenizer.pad_token_id)[0]
-
         return output_ids[self._assistant_role_slice.stop:]
     
     def generate_str(self, model, gen_config=None):
@@ -1442,10 +1448,14 @@ class EvaluateAttack(object):
 class ModelWorker(object):
 
     def __init__(self, model_path, model_kwargs, tokenizer, conv_template, device):
-        self.model = AutoModelForCausalLM.from_pretrained(
+        # self.model = AutoModelForCausalLM.from_pretrained(
+        #     model_path,
+        #     torch_dtype=torch.float16,
+        #     trust_remote_code=True,
+        #     **model_kwargs
+        # ).to(device).eval()
+        self.model = AutoGPTQForCausalLM.from_quantized(
             model_path,
-            torch_dtype=torch.float16,
-            trust_remote_code=True,
             **model_kwargs
         ).to(device).eval()
         self.tokenizer = tokenizer
