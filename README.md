@@ -1,4 +1,13 @@
-# WIP - Quantized LLM Attacks
+# WIP - GPTQ Quantized LLM Attacks
+
+This is a work-in-progress version of LLM-Attacks code that supports GPTQ quantized models using AutoGPTQ
+
+It is currently spaghetti code, but it works and you can follow their instructions since my changes are pretty straightforward and the only stuff you need to change will be in the config files. Since I haven't set up choosing between loading a quantized model and a nonquantized model you are unable to load non GPTQ models.
+
+## Todo
+* Make code neater, fully integrate changes into AttackManager
+* Allow non-GPTQ models to be loaded
+
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
