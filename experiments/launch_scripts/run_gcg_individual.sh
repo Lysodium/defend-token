@@ -5,7 +5,7 @@
 export WANDB_MODE=disabled
 
 # Optionally set the cache for transformers
-# export TRANSFORMERS_CACHE='YOUR_PATH/huggingface'
+# export TRANSFORMERS_CACHE='~/Advex-NLP/huggingface'
 
 export model=$1 # llama2 or vicuna
 export setup=$2 # behaviors or strings
@@ -18,17 +18,31 @@ else
     echo "Folder '../results' already exists."
 fi
 
-for data_offset in 0 10 20 30 40 50 60 70 80 90
-do
+data_offset=50
 
-    python -u ../main.py \
-        --config="../configs/individual_${model}.py" \
-        --config.attack=gcg \
-        --config.train_data="../../data/advbench/harmful_${setup}.csv" \
-        --config.result_prefix="../results/individual_${setup}_${model}_gcg_offset${data_offset}" \
-        --config.n_train_data=10 \
-        --config.data_offset=$data_offset \
-        --config.n_steps=1000 \
-        --config.test_steps=50 \
+python -u ../main.py \
+    --config="../configs/individual_${model}.py" \
+    --config.attack=gcg \
+    --config.train_data="../../data/advbench/harmful_${setup}.csv" \
+    --config.test_data="../../data/advbench/harmful_${setup}.csv" \
+    --config.result_prefix="../results/individual_${setup}_${model}_gcg_offset${data_offset}" \
+    --config.n_train_data=25 \
+    --config.n_test_data=10 \
+    --config.data_offset=$data_offset \
+    --config.n_steps=1000 \
+    --config.test_steps=100 \
 
-done
+# for data_offset in 0 10 20 30 40 50 60 70 80 90
+# do
+
+#     python -u ../main.py \
+#         --config="../configs/individual_${model}.py" \
+#         --config.attack=gcg \
+#         --config.train_data="../../data/advbench/harmful_${setup}.csv" \
+#         --config.result_prefix="../results/individual_${setup}_${model}_gcg_offset${data_offset}" \
+#         --config.n_train_data=10 \
+#         --config.data_offset=$data_offset \
+#         --config.n_steps=1000 \
+#         --config.test_steps=50 \
+
+# done
