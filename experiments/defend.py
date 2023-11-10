@@ -1,4 +1,4 @@
-'''A main script to run attack for LLMs.'''
+'''Defending against attacked LLM prompts.'''
 import time
 import importlib
 import numpy as np
@@ -15,6 +15,7 @@ def dynamic_import(module):
     return importlib.import_module(module)
 
 def main(_):
+
     mp.set_start_method('spawn')
 
     params = _CONFIG.value

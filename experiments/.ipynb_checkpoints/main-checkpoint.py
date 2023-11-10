@@ -15,6 +15,7 @@ def dynamic_import(module):
     return importlib.import_module(module)
 
 def main(_):
+
     mp.set_start_method('spawn')
 
     params = _CONFIG.value

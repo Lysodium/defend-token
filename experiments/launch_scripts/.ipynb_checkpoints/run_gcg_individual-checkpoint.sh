@@ -20,7 +20,7 @@ fi
 
 data_offset=50
 
-python3.9 -u ../main.py \
+python -u ../main.py \
     --config="../configs/individual_${model}.py" \
     --config.attack=gcg \
     --config.train_data="../../data/advbench/harmful_${setup}.csv" \

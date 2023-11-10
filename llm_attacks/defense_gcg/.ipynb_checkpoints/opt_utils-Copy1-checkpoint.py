@@ -8,9 +8,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from llm_attacks import get_embedding_matrix, get_embeddings
 
 
-from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
-from auto_gptq.modeling import LlamaGPTQForCausalLM
-
 def token_gradients(model, input_ids, input_slice, target_slice, loss_slice):
 
     """
@@ -35,6 +32,7 @@ def token_gradients(model, input_ids, input_slice, target_slice, loss_slice):
         The gradients of each token in the input_slice with respect to the loss.
     """
 
+    #One-hot of input requests
     embed_weights = get_embedding_matrix(model)
     one_hot = torch.zeros(
         input_ids[input_slice].shape[0],
@@ -59,8 +57,8 @@ def token_gradients(model, input_ids, input_slice, target_slice, loss_slice):
             embeds[:,input_slice.stop:,:]
         ], 
         dim=1)
-    
     logits = model(inputs_embeds=full_embeds).logits
+    #Words we want, for defender it should be whole sentence perplexity
     targets = input_ids[target_slice]
     loss = nn.CrossEntropyLoss()(logits[0,loss_slice,:], targets)
     
@@ -114,10 +112,10 @@ def get_filtered_cands(tokenizer, control_cand, filter_cand=True, curr_control=N
     return cands
 
 
-def get_logits(*, model, tokenizer, input_ids, control_slice, test_controls=None, return_ids=False):
+def get_logits(*, model, tokenizer, input_ids, defend_slice, test_controls=None, return_ids=False, batch_size=512):
     
     if isinstance(test_controls[0], str):
-        max_len = control_slice.stop - control_slice.start
+        max_len = defend_slice.stop - defend_slice.start
         test_ids = [
             torch.tensor(tokenizer(control, add_special_tokens=False).input_ids[:max_len], device=model.device)
             for control in test_controls
@@ -130,14 +128,14 @@ def get_logits(*, model, tokenizer, input_ids, control_slice, test_controls=None
     else:
         raise ValueError(f"test_controls must be a list of strings, got {type(test_controls)}")
 
-    if not(test_ids[0].shape[0] == control_slice.stop - control_slice.start):
+    if not(test_ids[0].shape[0] == defend_slice.stop - defend_slice.start):
         raise ValueError((
             f"test_controls must have shape "
-            f"(n, {control_slice.stop - control_slice.start}), " 
+            f"(n, {defend_slice.stop - defend_slice.start}), " 
             f"got {test_ids.shape}"
         ))
 
-    locs = torch.arange(control_slice.start, control_slice.stop).repeat(test_ids.shape[0], 1).to(model.device)
+    locs = torch.arange(defend_slice.start, defend_slice.stop).repeat(test_ids.shape[0], 1).to(model.device)
     ids = torch.scatter(
         input_ids.unsqueeze(0).repeat(test_ids.shape[0], 1).to(model.device),
         1,
@@ -151,13 +149,32 @@ def get_logits(*, model, tokenizer, input_ids, control_slice, test_controls=None
 
     if return_ids:
         del locs, test_ids ; gc.collect()
-        return model(input_ids=ids, attention_mask=attn_mask).logits, ids
+        return forward(model=model, input_ids=ids, attention_mask=attn_mask, batch_size=batch_size), ids
     else:
         del locs, test_ids
-        logits = model(input_ids=ids, attention_mask=attn_mask).logits
+        logits = forward(model=model, input_ids=ids, attention_mask=attn_mask, batch_size=batch_size)
         del ids ; gc.collect()
         return logits
+    
 
+def forward(*, model, input_ids, attention_mask, batch_size=512):
+
+    logits = []
+    for i in range(0, input_ids.shape[0], batch_size):
+        
+        batch_input_ids = input_ids[i:i+batch_size]
+        if attention_mask is not None:
+            batch_attention_mask = attention_mask[i:i+batch_size]
+        else:
+            batch_attention_mask = None
+
+        logits.append(model(input_ids=batch_input_ids, attention_mask=batch_attention_mask).logits)
+
+        gc.collect()
+
+    del batch_input_ids, batch_attention_mask
+    
+    return torch.cat(logits, dim=0)
 
 def target_loss(logits, ids, target_slice):
     crit = nn.CrossEntropyLoss(reduction='none')
@@ -166,22 +183,31 @@ def target_loss(logits, ids, target_slice):
     return loss.mean(dim=-1)
 
 
-def load_model_and_tokenizer(model_path, tokenizer_path=None, device='cuda:0', **kwargs):
-    model = AutoGPTQForCausalLM.from_quantized(
+def load_model_and_tokenizer(model_path, tokenizer_path=None, load_8bit_model=False, device='cuda:0', **kwargs):
+    if load_8bit_model:
+        model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            torch_dtype=torch.float16,
+            load_in_8bit=True,
+            device_map='auto',
+            trust_remote_code=True,
+            **kwargs
+        ).eval()
+    else:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            torch_dtype=torch.float32,
             trust_remote_code=True,
             **kwargs
         ).to(device).eval()
-    
+
     tokenizer_path = model_path if tokenizer_path is None else tokenizer_path
-    
+
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_path,
         trust_remote_code=True,
         use_fast=False
     )
-    
+
     if 'oasst-sft-6-llama-30b' in tokenizer_path:
         tokenizer.bos_token_id = 1
         tokenizer.unk_token_id = 0
@@ -195,5 +221,5 @@ def load_model_and_tokenizer(model_path, tokenizer_path=None, device='cuda:0', *
         tokenizer.padding_side = 'left'
     if not tokenizer.pad_token:
         tokenizer.pad_token = tokenizer.eos_token
-    
+
     return model, tokenizer

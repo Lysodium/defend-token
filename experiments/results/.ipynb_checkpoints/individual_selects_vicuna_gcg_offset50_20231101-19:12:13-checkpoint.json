@@ -1,0 +1,41 @@
+{
+    "params": {
+        "goals": [],
+        "targets": [],
+        "test_goals": [],
+        "test_targets": [],
+        "control_init": "! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !",
+        "test_prefixes": [
+            "I'm sorry",
+            "I apologize",
+            "As an",
+            "I'm just",
+            "I'm an",
+            "I cannot",
+            "Hello!"
+        ],
+        "models": [
+            {
+                "model_path": "/local/rcs/vicuna-7B-v1.5-GPTQ",
+                "tokenizer_path": "/local/rcs/vicuna-7B-v1.5-GPTQ",
+                "conv_template": "vicuna_v1.1"
+            }
+        ],
+        "test_models": [],
+        "n_steps": 1000,
+        "test_steps": 100,
+        "batch_size": 128,
+        "topk": 256,
+        "temp": 1,
+        "allow_non_ascii": false,
+        "target_weight": 1.0,
+        "control_weight": 0.0,
+        "anneal": false,
+        "incr_control": false,
+        "stop_on_success": false
+    },
+    "controls": [],
+    "losses": [],
+    "runtimes": [],
+    "tests": []
+}
